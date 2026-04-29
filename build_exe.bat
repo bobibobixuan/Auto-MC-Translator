@@ -21,15 +21,15 @@ pyinstaller ^
   --onefile ^
   --console ^
   --name MinecraftAITranslator ^
-  --collect-all gradio ^
-  --collect-all gradio_client ^
-  --collect-all groovy ^
   --collect-all fastapi ^
   --collect-all starlette ^
+    --collect-all uvicorn ^
+    --collect-all websockets ^
   --collect-all huggingface_hub ^
   --collect-all markdown_it ^
   --collect-all pygments ^
   --collect-all safehttpx ^
+    --add-data "mc_ai_translator\web_ui\static;mc_ai_translator\web_ui\static" ^
   --paths . ^
   app.py
 

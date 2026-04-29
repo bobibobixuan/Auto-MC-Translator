@@ -13,6 +13,9 @@ class LanguagePreset:
         return f"{self.label} | {self.code}"
 
 
+DEFAULT_SOURCE_LANG = "en_us"
+DEFAULT_TARGET_LANG = "zh_cn"
+
 LANGUAGE_PRESETS: tuple[LanguagePreset, ...] = (
     LanguagePreset("en_us", "英语（美国）"),
     LanguagePreset("en_gb", "英语（英国）"),

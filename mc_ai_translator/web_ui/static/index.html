@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minecraft AI Translator</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <span class="hero-kicker">本地 AI 汉化工作台</span>
+        <h1>Minecraft AI Translator</h1>
+        <p>默认值已经调好。通常只要选择模组或目录、填写 API Key，然后点击开始翻译，结果会固定导出到程序目录下的 output 文件夹。</p>
+      </div>
+      <div class="hero-tags">
+        <span>开箱即用默认值</span>
+        <span>自动识别输入类型</span>
+        <span>固定输出到 output</span>
+        <span>资源包名称可自定义</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel panel-form">
+        <div class="panel-heading">
+          <h2>一步开始</h2>
+          <p>默认值已经调好。通常只需要选择路径、填写资源包名称和 API Key。</p>
+        </div>
+
+        <div class="hint-card">
+          <strong>自动识别输入类型</strong>
+          <span>可以直接选择单个 .jar / .zip，也可以选择 mods、resourcepacks 或整合包目录。输出会固定写到程序目录下的 output 文件夹。</span>
+        </div>
+
+        <div class="field-group">
+          <label for="modpack_path">模组文件或目录</label>
+          <div class="inline-actions">
+            <input type="text" id="modpack_path" placeholder="C:\Minecraft\mods\FarmersDelight.jar 或 C:\Minecraft\Instances\MyPack\mods">
+            <button type="button" class="button button-secondary js-pick-file">选择模组文件</button>
+            <button type="button" class="button button-secondary js-pick-dir">选择目录</button>
+          </div>
+        </div>
+
+        <div class="primary-grid">
+          <div class="field-group primary-span-2">
+            <label for="pack_name">资源包名称（可自定义）</label>
+            <input type="text" id="pack_name" placeholder="不填会按输入名称自动生成，例如 FarmersDelight-zh_cn">
+          </div>
+
+          <div class="field-group">
+            <label for="target_lang">目标语言</label>
+            <select id="target_lang"></select>
+            <p class="field-note" id="target_lang_note"></p>
+          </div>
+
+          <div class="field-group">
+            <label for="api_key">API Key</label>
+            <input type="password" id="api_key" placeholder="填写模型服务所需的 API Key">
+          </div>
+        </div>
+
+        <section class="mode-panel">
+          <div class="mode-block">
+            <div class="mode-block-header">
+              <div>
+                <span class="mode-eyebrow">翻译模式</span>
+                <h3>完整模式 / 补全模式</h3>
+              </div>
+              <p>先决定是重跑整个语言包，还是只补目标语言里缺失的 key。</p>
+            </div>
+            <div class="mode-card-grid" id="translation_mode_cards">
+              <button type="button" class="mode-card" data-select-target="translation_mode" data-mode-value="完整翻译整个语言包">
+                <strong>完整模式</strong>
+                <span>所有源语言条目都会重新翻译，适合首次全量汉化。</span>
+              </button>
+              <button type="button" class="mode-card" data-select-target="translation_mode" data-mode-value="只补全缺失项">
+                <strong>补全模式</strong>
+                <span>只翻目标语言中缺失的 key，适合在已有汉化基础上补洞。</span>
+              </button>
+            </div>
+            <p class="field-note mode-note" id="translation_mode_note"></p>
+            <select id="translation_mode" hidden></select>
+          </div>
+
+          <div class="mode-block">
+            <div class="mode-block-header">
+              <div>
+                <span class="mode-eyebrow">速度模式</span>
+                <h3>稳定 / 均衡 / 快速</h3>
+              </div>
+              <p>这个预设会联动完整文件跳过和重复文本复用策略，优先给你常用组合。</p>
+            </div>
+            <div class="mode-card-grid mode-card-grid-compact" id="optimization_preset_cards">
+              <button type="button" class="mode-card" data-select-target="optimization_preset" data-mode-value="最稳">
+                <strong>稳定模式</strong>
+                <span>优先结果一致性，适合严格重跑。</span>
+              </button>
+              <button type="button" class="mode-card" data-select-target="optimization_preset" data-mode-value="均衡">
+                <strong>均衡模式</strong>
+                <span>默认推荐，稳定性和速度更平衡。</span>
+              </button>
+              <button type="button" class="mode-card" data-select-target="optimization_preset" data-mode-value="最快">
+                <strong>快速模式</strong>
+                <span>优先减少请求量，适合大批量补全。</span>
+              </button>
+              <button type="button" class="mode-card mode-card-muted" data-select-target="optimization_preset" data-mode-value="自定义">
+                <strong>自定义</strong>
+                <span>你在高级设置里手动细调当前组合。</span>
+              </button>
+            </div>
+            <p class="field-note mode-note" id="optimization_preset_note"></p>
+            <select id="optimization_preset" hidden></select>
+          </div>
+        </section>
+
+        <div class="preview-card">
+          <span class="preview-label">输出位置预览（固定输出到程序目录 output）</span>
+          <pre id="output_preview" class="preview-code">尚未选择输入路径...</pre>
+        </div>
+
+        <details class="advanced-panel">
+          <summary>高级设置</summary>
+          <div class="advanced-stack">
+            <section class="subpanel">
+              <div class="subpanel-header">
+                <div>
+                  <h3>语言与输出</h3>
+                  <p>平时主要只会动源语言、pack_format 和批次大小。</p>
+                </div>
+              </div>
+
+              <div class="subpanel-grid subpanel-grid-3">
+                <div class="field-group">
+                  <label for="source_lang">源语言</label>
+                  <select id="source_lang"></select>
+                  <p class="field-note" id="source_lang_note"></p>
+                </div>
+                <div class="field-group">
+                  <label for="pack_format">pack_format</label>
+                  <input type="number" id="pack_format" min="1" step="1">
+                </div>
+                <div class="field-group">
+                  <label for="batch_size">每批翻译条目数</label>
+                  <input type="number" id="batch_size" min="5" max="100" step="1">
+                </div>
+              </div>
+            </section>
+
+            <section class="subpanel">
+              <div class="subpanel-header">
+                <div>
+                  <h3>翻译细调</h3>
+                  <p>这里控制词条复用、完整文件跳过和翻译风格。</p>
+                </div>
+              </div>
+
+              <div class="subpanel-grid subpanel-grid-3">
+                <div class="field-group">
+                  <label for="skip_complete_targets">完整目标文件跳过</label>
+                  <select id="skip_complete_targets"></select>
+                  <p class="field-note" id="skip_complete_note"></p>
+                </div>
+
+                <div class="field-group">
+                  <label for="reuse_mode">重复文本复用</label>
+                  <select id="reuse_mode"></select>
+                  <p class="field-note" id="reuse_mode_note"></p>
+                </div>
+
+                <div class="field-group">
+                  <label for="skill">翻译 Skill</label>
+                  <select id="skill"></select>
+                  <p class="field-note" id="skill_note"></p>
+                </div>
+              </div>
+            </section>
+
+            <section class="subpanel">
+              <div class="subpanel-header">
+                <div>
+                  <h3>模型与接口</h3>
+                  <p>只有更换服务商、改模型或者调试兼容接口时才需要改这里。</p>
+                </div>
+              </div>
+
+              <div class="subpanel-grid subpanel-grid-2">
+                <div class="field-group">
+                  <label for="provider">服务商预设</label>
+                  <select id="provider"></select>
+                  <p class="field-note" id="provider_note"></p>
+                </div>
+
+                <div class="field-group">
+                  <label for="model_select">模型名</label>
+                  <select id="model_select"></select>
+                  <input type="text" id="model" placeholder="自定义模型名" class="spaced-input">
+                </div>
+
+                <div class="field-group full-span">
+                  <label for="base_url">OpenAI 兼容接口 Base URL</label>
+                  <input type="text" id="base_url">
+                </div>
+
+                <div class="field-group full-span">
+                  <label for="custom_prompt">额外提示词（可选，越长越耗 token）</label>
+                  <textarea id="custom_prompt" rows="4" placeholder="仅在确有必要时填写；这段内容会跟随每个批次重复发送给模型。"></textarea>
+                </div>
+              </div>
+            </section>
+          </div>
+        </details>
+
+        <button type="button" id="start_btn" class="button button-primary button-large">开始一键翻译</button>
+      </section>
+
+      <section class="panel panel-output">
+        <div class="status-card">
+          <div class="status-header">
+            <div>
+              <span class="status-eyebrow">运行状态</span>
+              <h2 id="status_title">等待开始</h2>
+            </div>
+            <span id="status_label" class="status-badge info">等待运行</span>
+          </div>
+          <p id="status_detail" class="status-detail">选择输入路径并填写 API Key 后即可启动任务。默认结果固定保存到程序目录下的 output 文件夹。</p>
+          <div class="status-meta-grid">
+            <div class="status-meta">
+              <strong>当前工作流</strong>
+              <code id="status_workflow">自动识别</code>
+            </div>
+            <div class="status-meta">
+              <strong>输入路径</strong>
+              <code id="status_input_path">尚未选择</code>
+            </div>
+            <div class="status-meta">
+              <strong>输出预览</strong>
+              <code id="status_output_preview">等待输入路径</code>
+            </div>
+          </div>
+          <div class="action-area">
+            <p id="action_note" class="action-note">翻译完成后，你可以直接打开程序目录下的 output 文件夹或翻译报告。</p>
+            <div class="action-buttons disabled" id="action_buttons">
+              <button type="button" class="button button-secondary js-open-folder" disabled>快捷打开导出文件夹</button>
+              <button type="button" class="button button-secondary js-open-report" disabled>快捷打开翻译报告</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-card" id="summary_panel"></div>
+
+        <div class="logs-card">
+          <div class="tabs">
+            <button type="button" class="tab-button active" data-target="beginner_log">小白日志</button>
+            <button type="button" class="tab-button" data-target="developer_log">开发者日志</button>
+          </div>
+          <div class="tab-pane active" id="beginner_log">
+            <pre id="beginner_log_content" class="log-view"></pre>
+          </div>
+          <div class="tab-pane" id="developer_log">
+            <pre id="developer_log_content" class="log-view"></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
