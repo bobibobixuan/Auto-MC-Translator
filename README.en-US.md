@@ -22,8 +22,11 @@ This project is designed to be a safe, repeatable translation workbench instead 
 - Supports both modern JSON lang files and legacy `.lang` files
 - Real-time logs for scanning, batching, retries, file writing, and final summary
 - Per-mod summary lines showing which mods were translated and how many entries were produced
+- Complete target-language files are detected and skipped automatically
+- Built-in presets for many common languages, with support for custom language codes
 - Automatic retry splitting when a model omits keys or a batch fails
-- Output is generated next to the selected input path
+- Output is generated in the application's `output/` folder
+- Beginner and developer log views are both available
 - Built-in provider presets for common OpenAI-compatible services
 - Windows-friendly local launcher and EXE packaging script
 
@@ -75,10 +78,22 @@ It will:
 
 ### 4. Use the Web UI
 
+The default UI now uses a beginner-friendly layout: the main screen only keeps the input path, pack name, API key, and the start button. Provider/model/language/batch settings are moved into `Advanced Settings`.
+
+The main screen now also exposes a `Target Language` picker so the tool is not limited to Chinese-only workflows.
+
 #### Translation Mode
 
-- `Single Mod Translation`: pick one `.jar` or `.zip` file
-- `Whole Folder Translation`: pick `mods`, `resourcepacks`, or a modpack root
+- Input type is now detected automatically:
+- Pick a `.jar` / `.zip` to translate a single mod
+- Pick a directory to batch translate a folder, resource pack folder, or modpack root
+
+#### Language Selection
+
+- `Target Language` is available directly on the main screen
+- Many common language presets are built in, such as `zh_cn`, `ja_jp`, `ko_kr`, `fr_fr`, `de_de`, `ru_ru`, `es_es`, and `pt_br`
+- You can also type a custom language code if your target language is not listed
+- `Source Language` remains in `Advanced Settings`, defaulting to `en_us`
 
 #### Translation Strategy
 
@@ -90,20 +105,18 @@ It will:
 - Type a path manually
 - Use `Choose Mod File`
 - Use `Choose Directory`
+- `Pack Name` is editable; if you leave it empty, it will be generated from the selected input name, such as `FarmersDelight-zh_cn`
 
 #### What You See While Running
 
 - Selected workflow and input path
 - Output location preview
-- Number of discovered language assets
-- Batch-by-batch request progress
-- Which mod is currently being processed
-- How many entries each mod has translated so far
-- A final mod summary after the job is finished
+- `Beginner Log`: simplified Chinese progress updates for normal users
+- `Developer Log`: full raw logs including batch requests, retries, and skip decisions
 
 ## Output Behavior
 
-The tool never edits the original mod files. Instead, it generates the translated pack next to the selected input path.
+The tool never edits the original mod files. Instead, it generates the translated pack in the application's `output/` folder.
 
 Example input:
 
@@ -114,9 +127,11 @@ C:\Minecraft\mods\FarmersDelight.jar
 Example output:
 
 ```text
-C:\Minecraft\mods\farmers-delight-ai-translation-20260429-223239
-C:\Minecraft\mods\farmers-delight-ai-translation-20260429-223239.zip
+C:\path\to\MinecraftAITranslator\output\farmersdelight-zh-cn-20260429-223239
+C:\path\to\MinecraftAITranslator\output\farmersdelight-zh-cn-20260429-223239.zip
 ```
+
+When running from source, this is usually the repository's `output/` folder. When running the packaged EXE, this becomes the `output/` folder next to the EXE.
 
 You can place the generated folder or ZIP into Minecraft's resource pack directory.
 

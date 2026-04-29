@@ -6,6 +6,14 @@ from typing import Callable, Dict, Iterable, List, Tuple
 
 from openai import OpenAI
 
+from .translation_optimization import (
+    DEFAULT_REUSE_MODE,
+    REUSE_MODE_AGGRESSIVE,
+    REUSE_MODE_OFF,
+    normalize_reuse_mode,
+)
+from .translation_skills import DEFAULT_SKILL_KEY, get_translation_skill
+
 
 ProgressCallback = Callable[[str], None]
 
@@ -18,6 +26,8 @@ class OpenAICompatibleTranslator:
         api_key: str,
         model: str,
         batch_size: int = 40,
+        skill_key: str = DEFAULT_SKILL_KEY,
+        reuse_mode: str = DEFAULT_REUSE_MODE,
         custom_prompt: str = "",
         progress: ProgressCallback | None = None,
     ) -> None:
@@ -27,8 +37,14 @@ class OpenAICompatibleTranslator:
         )
         self.model = model
         self.batch_size = max(1, batch_size)
+        self.skill = get_translation_skill(skill_key)
+        self.reuse_mode = normalize_reuse_mode(reuse_mode)
+        self.reuse_translations = self.reuse_mode != REUSE_MODE_OFF
         self.custom_prompt = custom_prompt.strip()
         self.progress = progress or (lambda _message: None)
+        self.translation_cache: Dict[tuple[str, str, str, str, str, str], str] = {}
+        self.cache_hits = 0
+        self.api_entry_count = 0
 
     def translate_entries(
         self,
@@ -37,12 +53,90 @@ class OpenAICompatibleTranslator:
         source_lang: str,
         target_lang: str,
     ) -> Dict[str, str]:
+        if not entries:
+            return {}
+
+        if self.reuse_mode == REUSE_MODE_OFF:
+            return self._translate_unique_entries(
+                entries,
+                source_lang=source_lang,
+                target_lang=target_lang,
+            )
+
+        translated: Dict[str, str] = {}
+        grouped_entries: Dict[tuple[str, str], List[str]] = {}
+        reused_cached = 0
+
+        for key, value in entries.items():
+            cache_key = self._build_cache_key(
+                source_lang=source_lang,
+                target_lang=target_lang,
+                entry_key=key,
+                source_text=value,
+            )
+            cached_value = self.translation_cache.get(cache_key)
+            if isinstance(cached_value, str) and cached_value.strip():
+                translated[key] = cached_value
+                reused_cached += 1
+                continue
+            group_key = self._build_group_key(entry_key=key, source_text=value)
+            grouped_entries.setdefault(group_key, []).append(key)
+
+        unique_payload: Dict[str, str] = {}
+        representative_to_keys: Dict[str, List[str]] = {}
+        deduplicated = 0
+        for _group_key, keys in grouped_entries.items():
+            representative_key = keys[0]
+            source_text = entries[representative_key]
+            representative_to_keys[representative_key] = keys
+            unique_payload[representative_key] = source_text
+            deduplicated += max(0, len(keys) - 1)
+
+        if reused_cached or deduplicated:
+            self.progress(
+                f"Optimization ({self.reuse_mode}): reused {reused_cached} cached entries and skipped {deduplicated} duplicate source texts."
+            )
+            self.cache_hits += reused_cached + deduplicated
+
+        if not unique_payload:
+            return translated
+
+        unique_translated = self._translate_unique_entries(
+            unique_payload,
+            source_lang=source_lang,
+            target_lang=target_lang,
+        )
+        for representative_key, translated_value in unique_translated.items():
+            source_text = unique_payload[representative_key]
+            for key in representative_to_keys.get(representative_key, [representative_key]):
+                self.translation_cache[
+                    self._build_cache_key(
+                        source_lang=source_lang,
+                        target_lang=target_lang,
+                        entry_key=key,
+                        source_text=source_text,
+                    )
+                ] = translated_value
+                translated[key] = translated_value
+
+        return translated
+
+    def _translate_unique_entries(
+        self,
+        entries: Dict[str, str],
+        *,
+        source_lang: str,
+        target_lang: str,
+    ) -> Dict[str, str]:
+        if not entries:
+            return {}
+
         translated: Dict[str, str] = {}
         batches = self._chunk_entries(entries.items())
         for index, batch in enumerate(batches, start=1):
             payload = dict(batch)
             batch_label = f"{index}/{len(batches)}"
-            self.progress(f"Batch {batch_label}: sending {len(payload)} entries to {self.model}")
+            self.progress(f"Batch {batch_label}: sending {len(payload)} unique entries to {self.model}")
             translated.update(
                 self._translate_batch_with_retry(
                     payload,
@@ -169,13 +263,17 @@ class OpenAICompatibleTranslator:
         source_lang: str,
         target_lang: str,
     ) -> Dict[str, str]:
-        system_prompt = (
-            f"You translate Minecraft localization from {source_lang} to {target_lang}. "
-            "Keep keys unchanged. Preserve placeholders like %s, %1$s, {0}, {player}, \\n, and Minecraft formatting codes like §a exactly. "
-            "Do not wrap the result in markdown. Return only a JSON object."
-        )
+        prompt_parts = [
+            f"Translate Minecraft mod localization {source_lang}->{target_lang}.",
+            "Return a JSON object only with the same keys.",
+            "Keep placeholders like %s, %1$s, {0}, {player}, \\n and formatting codes like §a exactly.",
+            self.skill.system_prompt,
+        ]
         if self.custom_prompt:
-            system_prompt = system_prompt + " " + self.custom_prompt
+            prompt_parts.append(self.custom_prompt)
+        system_prompt = " ".join(part for part in prompt_parts if part)
+
+        self.api_entry_count += len(payload)
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -184,12 +282,37 @@ class OpenAICompatibleTranslator:
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
-                    "content": json.dumps(payload, ensure_ascii=False, indent=2),
+                    "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                 },
             ],
         )
         message = response.choices[0].message.content or ""
         return self._extract_json_object(message)
+
+    def _build_cache_key(
+        self,
+        *,
+        source_lang: str,
+        target_lang: str,
+        entry_key: str,
+        source_text: str,
+    ) -> tuple[str, str, str, str, str, str]:
+        return (
+            source_lang,
+            target_lang,
+            self.skill.key,
+            self.custom_prompt,
+            self._build_context_signature(entry_key),
+            source_text,
+        )
+
+    def _build_group_key(self, *, entry_key: str, source_text: str) -> tuple[str, str]:
+        return (self._build_context_signature(entry_key), source_text)
+
+    def _build_context_signature(self, entry_key: str) -> str:
+        if self.reuse_mode == REUSE_MODE_AGGRESSIVE:
+            return ""
+        return entry_key.strip()
 
     @staticmethod
     def _extract_json_object(text: str) -> Dict[str, str]:
